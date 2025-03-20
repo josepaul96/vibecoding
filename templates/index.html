@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Comments Word Cloud</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>YouTube Comments Word Cloud</h1>
+        <div class="input-section">
+            <input type="text" id="youtube-url" placeholder="Enter YouTube video URL">
+            <button onclick="analyzeComments()">Analyze Comments</button>
+        </div>
+        <div id="loading" class="hidden">Loading...</div>
+        <div id="error" class="hidden"></div>
+        <div id="visualization"></div>
+    </div>
+
+    <script>
+        function analyzeComments() {
+            const url = document.getElementById('youtube-url').value;
+            const loading = document.getElementById('loading');
+            const error = document.getElementById('error');
+            const visualization = document.getElementById('visualization');
+
+            if (!url) {
+                error.textContent = 'Please enter a YouTube URL';
+                error.classList.remove('hidden');
+                return;
+            }
+
+            loading.classList.remove('hidden');
+            error.classList.add('hidden');
+            visualization.innerHTML = '';
+
+            fetch('/analyze', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ url }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                createWordCloud(data);
+            })
+            .catch(err => {
+                error.textContent = err.message;
+                error.classList.remove('hidden');
+            })
+            .finally(() => {
+                loading.classList.add('hidden');
+            });
+        }
+
+        function createWordCloud(data) {
+            const width = 800;
+            const height = 600;
+            const padding = 20;
+
+            // Clear previous visualization
+            d3.select('#visualization').selectAll('*').remove();
+
+            // Create SVG
+            const svg = d3.select('#visualization')
+                .append('svg')
+                .attr('width', width)
+                .attr('height', height);
+
+            // Create scales
+            const sizeScale = d3.scaleLinear()
+                .domain([0, d3.max(data, d => d.size)])
+                .range([20, 100]);
+
+            // Create simulation
+            const simulation = d3.forceSimulation(data)
+                .force('center', d3.forceCenter(width / 2, height / 2))
+                .force('charge', d3.forceManyBody().strength(-30))
+                .force('collision', d3.forceCollide().radius(d => sizeScale(d.size) + 2))
+                .on('tick', ticked);
+
+            // Create word bubbles
+            const bubbles = svg.selectAll('g')
+                .data(data)
+                .enter()
+                .append('g')
+                .call(d3.drag()
+                    .on('start', dragstarted)
+                    .on('drag', dragged)
+                    .on('end', dragended));
+
+            bubbles.append('circle')
+                .attr('r', d => sizeScale(d.size))
+                .style('fill', d => d3.schemeCategory10[Math.floor(Math.random() * 10)]);
+
+            bubbles.append('text')
+                .text(d => d.text)
+                .attr('text-anchor', 'middle')
+                .attr('dy', '.3em')
+                .style('fill', 'white')
+                .style('font-size', d => `${Math.min(sizeScale(d.size) / 2, 20)}px`);
+
+            function ticked() {
+                bubbles.attr('transform', d => `translate(${d.x},${d.y})`);
+            }
+
+            function dragstarted(event) {
+                if (!event.active) simulation.alphaTarget(0.3).restart();
+                event.subject.fx = event.subject.x;
+                event.subject.fy = event.subject.y;
+            }
+
+            function dragged(event) {
+                event.subject.fx = event.x;
+                event.subject.fy = event.y;
+            }
+
+            function dragended(event) {
+                if (!event.active) simulation.alphaTarget(0);
+                event.subject.fx = null;
+                event.subject.fy = null;
+            }
+        }
+    </script>
+</body>
+</html> 

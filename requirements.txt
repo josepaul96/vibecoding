@@ -1,0 +1,4 @@
+flask==3.0.2
+google-api-python-client==2.118.0
+python-dotenv==1.0.1
+nltk==3.8.1 
